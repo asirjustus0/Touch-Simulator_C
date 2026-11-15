@@ -61,7 +61,26 @@ foreach (var invalid in new[] { "WIN_SWIPE_4,5,6", "WIN_MONITOR_START_50", "WIN_
     try { commands.Execute(invalid); throw new Exception("Expected rejection for " + invalid); }
     catch (ArgumentException) { total++; }
 }
-Console.WriteLine($"PASS: {total} command routing and validation checks. No real input was injected.");
+// UI coordinate mapping is independent of WinForms and can be tested without injecting input.
+void CheckMapping(Point cursor, Size viewer, Size bitmap, Rectangle bounds, bool relative,
+    bool expected, Point wantCommand, Point wantScreen)
+{
+    bool success = TouchSimulator.PreviewCoordinateMapper.TryMap(cursor, viewer, bitmap, bounds,
+        relative, out Point commandPoint, out Point screenPoint);
+    if (success != expected || (success && (commandPoint != wantCommand || screenPoint != wantScreen)))
+        throw new Exception($"Mapping failed: {cursor}, result {success} / {commandPoint} / {screenPoint}");
+    total++;
+}
+// 800x600 image into 400x400 viewer -> vertical letterbox of 50px each.
+CheckMapping(new Point(100, 100), new Size(400,400), new Size(800,600),
+    new Rectangle(350,120,800,600), true, true, new Point(200,100), new Point(550,220));
+CheckMapping(new Point(100, 20), new Size(400,400), new Size(800,600),
+    new Rectangle(350,120,800,600), true, false, Point.Empty, Point.Empty);
+CheckMapping(new Point(0, 0), new Size(800,600), new Size(800,600),
+    new Rectangle(-1600,0,800,600), false, true, new Point(-1600,0), new Point(-1600,0));
+CheckMapping(new Point(399,349), new Size(400,400), new Size(800,600),
+    new Rectangle(0,0,800,600), true, true, new Point(798,598), new Point(798,598));
+Console.WriteLine($"PASS: {total} command and coordinate mapping checks. No real input was injected.");
 
 internal sealed class FakeWindowsDriver : IWindowsDriver
 {

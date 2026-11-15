@@ -20,6 +20,7 @@ public sealed class User32WindowsDriver : IWindowsDriver
     private string? _targetTitle;
     private uint _targetProcessId;
     private bool _touchInitialized;
+    private int? _lastTouchError;
     private const int MaxContacts = 10;
 
     public string? TargetWindowTitle
@@ -80,7 +81,7 @@ public sealed class User32WindowsDriver : IWindowsDriver
     {
         var r = CaptureBounds;
         return $"Target: {TargetWindowTitle ?? "entire virtual desktop"}; origin=({r.X},{r.Y}); size={r.Width}x{r.Height}; " +
-               $"touch injection initialized={_touchInitialized}";
+               $"touch injection initialized={_touchInitialized}; last touch error={(_lastTouchError?.ToString() ?? "none")}";
     }
 
     public string GetDiagnostics()
@@ -92,7 +93,9 @@ public sealed class User32WindowsDriver : IWindowsDriver
         return $"Process {(IntPtr.Size * 8)}-bit; INPUT={inputSize} (expected 40); " +
                $"POINTER_INFO={pointerSize} (expected 96); POINTER_TOUCH_INFO={touchSize} (expected 144); " +
                $"structures={(sizesMatch ? "PASS" : "MISMATCH")}; " +
-               $"display={CaptureBounds.Width}x{CaptureBounds.Height}.";
+               $"display={CaptureBounds.Width}x{CaptureBounds.Height}; " +
+               $"touch initialized={_touchInitialized}; " +
+               $"last touch Win32 error={(_lastTouchError?.ToString() ?? "none")}.";
     }
 
     public IReadOnlyList<string> GetWindowTitles() => GetWindows().Select(w => w.Title).Distinct().OrderBy(x => x).ToList();
@@ -292,8 +295,11 @@ public sealed class User32WindowsDriver : IWindowsDriver
     private void EnsureTouch()
     {
         if (_touchInitialized) return;
+        if (IntPtr.Size != 8 || Marshal.SizeOf<W.POINTER_INFO>() != 96 ||
+            Marshal.SizeOf<W.POINTER_TOUCH_INFO>() != 144)
+            throw new InvalidOperationException("Touch P/Invoke structures have unexpected sizes. Run WIN_DIAGNOSTICS.");
         if (!W.InitializeTouchInjection(MaxContacts, W.TOUCH_FEEDBACK_NONE))
-            throw new Win32Exception(Marshal.GetLastWin32Error(), "InitializeTouchInjection failed");
+            throw new Win32Exception(Marshal.GetLastWin32Error(), "InitializeTouchInjection failed (run WIN_DIAGNOSTICS)");
         _touchInitialized = true;
     }
 
@@ -308,34 +314,69 @@ public sealed class User32WindowsDriver : IWindowsDriver
         (int)Math.Round(a.X + (b.X - a.X) * t),
         (int)Math.Round(a.Y + (b.Y - a.Y) * t));
 
+    /// <summary>
+    /// A contact must be DOWN first, then UPDATE frames while pressed, followed
+    /// by UP at the last successfully injected position. For a static hold,
+    /// send periodic UPDATE frames or Windows can cancel the touch contact.
+    /// </summary>
     private void TouchPath(IReadOnlyList<Point[]> frames, int duration, int initialHold)
     {
-        if (frames.Count == 0) throw new ArgumentException("Empty touch path");
+        if (frames.Count == 0 || frames[0].Length == 0) throw new ArgumentException("Empty touch path");
+        int contacts = frames[0].Length;
+        if (frames.Any(frame => frame.Length != contacts)) throw new ArgumentException("Each touch frame must contain all active contacts.");
         lock (_inputLock)
         {
             EnsureTouch();
-            var last = frames[0];
-            Inject(last, W.POINTER_FLAG_DOWN | W.POINTER_FLAG_INRANGE | W.POINTER_FLAG_INCONTACT);
+            var lastSuccessfulFrame = frames[0];
+            // A failed DOWN must not be followed by UP.
+            Inject(lastSuccessfulFrame, W.POINTER_FLAG_DOWN | W.POINTER_FLAG_INRANGE | W.POINTER_FLAG_INCONTACT, "DOWN");
             try
             {
-                if (initialHold > 0) Thread.Sleep(initialHold);
+                if (initialHold > 0)
+                {
+                    int remaining = initialHold;
+                    while (remaining > 0)
+                    {
+                        int wait = Math.Min(25, remaining);
+                        Thread.Sleep(wait);
+                        remaining -= wait;
+                        Inject(lastSuccessfulFrame, W.POINTER_FLAG_UPDATE | W.POINTER_FLAG_INRANGE | W.POINTER_FLAG_INCONTACT, "HOLD/UPDATE");
+                    }
+                }
                 for (int i = 1; i < frames.Count; i++)
                 {
                     Thread.Sleep(Math.Max(1, duration / (frames.Count - 1)));
-                    last = frames[i];
-                    Inject(last, W.POINTER_FLAG_UPDATE | W.POINTER_FLAG_INRANGE | W.POINTER_FLAG_INCONTACT);
+                    Inject(frames[i], W.POINTER_FLAG_UPDATE | W.POINTER_FLAG_INRANGE | W.POINTER_FLAG_INCONTACT, "MOVE/UPDATE");
+                    lastSuccessfulFrame = frames[i];
                 }
             }
-            finally { Inject(last, W.POINTER_FLAG_UP); }
+            catch
+            {
+                // Preserve the original error. A failed UPDATE can cancel contacts,
+                // so cleanup UP is best-effort and uses the last accepted location.
+                try { Inject(lastSuccessfulFrame, W.POINTER_FLAG_UP, "CLEANUP/UP"); }
+                catch { /* Original error is more useful. */ }
+                throw;
+            }
+            Inject(lastSuccessfulFrame, W.POINTER_FLAG_UP, "UP");
         }
     }
 
-    private static void Inject(Point[] contacts, uint flags)
+    private void Inject(Point[] contacts, uint flags, string phase)
     {
         var pointers = new W.POINTER_TOUCH_INFO[contacts.Length];
+        // Touch contacts must lie within the virtual desktop, independent of
+        // the selected target window's local coordinate system.
+        Rectangle desktop = new(
+            W.GetSystemMetrics(W.SM_XVIRTUALSCREEN),
+            W.GetSystemMetrics(W.SM_YVIRTUALSCREEN),
+            W.GetSystemMetrics(W.SM_CXVIRTUALSCREEN),
+            W.GetSystemMetrics(W.SM_CYVIRTUALSCREEN));
         for (int i = 0; i < contacts.Length; i++)
         {
             int x = contacts[i].X, y = contacts[i].Y;
+            if (!desktop.Contains(x, y))
+                throw new ArgumentOutOfRangeException(nameof(contacts), $"Touch contact ({x},{y}) outside desktop {desktop}.");
             pointers[i] = new W.POINTER_TOUCH_INFO
             {
                 pointerInfo = new W.POINTER_INFO
@@ -343,17 +384,41 @@ public sealed class User32WindowsDriver : IWindowsDriver
                     pointerType = W.PT_TOUCH,
                     pointerId = (uint)i,
                     pointerFlags = flags,
-                    ptPixelLocation = new W.POINT(x, y),
-                    ptPixelLocationRaw = new W.POINT(x, y)
+                    ptPixelLocation = new W.POINT(x, y)
                 },
                 touchMask = W.TOUCH_MASK_CONTACTAREA | W.TOUCH_MASK_ORIENTATION | W.TOUCH_MASK_PRESSURE,
-                rcContact = new W.RECT { Left = x - 2, Top = y - 2, Right = x + 2, Bottom = y + 2 },
+                rcContact = new W.RECT
+                {
+                    Left = Math.Max(desktop.Left, x - 2), Top = Math.Max(desktop.Top, y - 2),
+                    Right = Math.Min(desktop.Right, x + 2), Bottom = Math.Min(desktop.Bottom, y + 2)
+                },
                 orientation = 90,
-                pressure = 512
+                pressure = 32000
             };
         }
-        if (!W.InjectTouchInput((uint)pointers.Length, pointers))
-            throw new Win32Exception(Marshal.GetLastWin32Error(), "InjectTouchInput failed");
+        for (int attempt = 0; attempt < 5; attempt++)
+        {
+            if (W.InjectTouchInput((uint)pointers.Length, pointers))
+            {
+                _lastTouchError = null;
+                return;
+            }
+            int error = Marshal.GetLastWin32Error();
+            _lastTouchError = error;
+            // ERROR_NOT_READY (21) can occur when frames are injected too quickly.
+            // Microsoft documents retrying the exact same frame in this situation.
+            if (error == 21 && attempt < 4) { Thread.Sleep(2); continue; }
+            string detail = error switch
+            {
+                87 => "Invalid touch frame or contact coordinates. Check WIN_DIAGNOSTICS and screen bounds.",
+                5 => "Access denied. Check integrity level, elevated targets and the interactive desktop.",
+                21 => "Windows is not ready for the next frame. Retry after a short pause.",
+                50 => "Touch injection is not supported in this environment/session.",
+                _ => "Check WIN_DIAGNOSTICS and the startup log for details."
+            };
+            throw new Win32Exception(error,
+                $"InjectTouchInput {phase} failed: Win32 error {error} ({new Win32Exception(error).Message}). {detail}");
+        }
     }
 
     private static void SetCursor(Point p)

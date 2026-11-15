@@ -1,4 +1,4 @@
-# Touch Simulator — all-C# desktop prototype v1.1
+# Touch Simulator — all-C# desktop prototype v1.2
 
 A **C#/.NET 10 Windows Forms** desktop application with an object-oriented, replaceable Win32 driver. No Python runtime is involved. The project includes a command-entry UI, an Execute button, a screenshot/live-preview window, optional tap-on-preview, genuine Windows multi-touch injection, mouse input, and no-dependency MJPEG AVI recording.
 
@@ -7,7 +7,7 @@ A **C#/.NET 10 Windows Forms** desktop application with an object-oriented, repl
 **Requirements to build:** Windows and the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) (Visual Studio with .NET desktop development is optional).
 
 1. Extract the ZIP archive anywhere on your Windows PC.
-2. Double-click `launch_windows.bat`. If a published EXE exists it launches that; otherwise it uses `dotnet run`.
+2. Double-click `build_exe_windows.bat` to generate `publish\TouchSimulator.exe` (replace the old v1.1 application). Then use `launch_windows.bat`. If a published EXE exists it launches that; otherwise it uses `dotnet run`.
    **The launcher keeps the command window open** if the application exits early and gives you the location of the startup log.
    Alternatively, use `run_source_windows.bat` directly (the window also stays open).
 3. In the UI, run `WIN_DIAGNOSTICS`, `WIN_SCREEN_INFO`, `WIN_WINDOWS`, and `WIN_SCREENSHOT` first (no input is injected).
@@ -28,7 +28,7 @@ dotnet publish .\TouchSimulator\TouchSimulator.csproj -c Release -r win-x64 --se
 dotnet run --project .\Tests\TouchSimulator.Tests.csproj -c Debug
 ```
 
-Tests use a fake driver and cover command dispatch, invalid commands, and screenshot/monitor/record directives. Live user32 injection still needs Windows-device validation.
+Tests use a fake driver and cover command dispatch, invalid commands, screenshot/monitor/record directives, and coordinate mapping across zoom/letterboxing and virtual desktops. Live user32 injection still needs Windows-device validation.
 
 **Documentation:** `docs/COMMAND_REFERENCE.md` contains the entire command set with arguments and examples; `docs/ARCHITECTURE.md` describes the driver abstraction and future actor layout.
 
@@ -56,3 +56,12 @@ Tests use a fake driver and cover command dispatch, invalid commands, and screen
 This package is provided as **editable source and Windows build scripts**, not a precompiled `.exe`. The development environment here is Linux without a .NET SDK or Windows desktop session. Consequently, the C# sources and actual Windows injection/video output **have not been compiled, executed, or verified on Windows**. Build and run the read-only commands first, then test touch gestures in a safe window. Report build errors or unexpected behavior for targeted fixes.
 
 References: [Microsoft InjectTouchInput](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-injecttouchinput), [Microsoft SendInput](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendinput), [.NET self-contained single-file deployment](https://learn.microsoft.com/en-us/dotnet/core/deploying/single-file/overview).
+
+## v1.2 improvements (UI + touch diagnostics)
+
+- Larger command/target/capture controls and redesigned preview area. Side panel is scrollable on smaller displays and DPI scaling uses `PerMonitorV2`.
+- Move the cursor over a captured image to see **Command X/Y** (target client coordinates, or desktop coordinates when no target is selected) and **Screen X/Y** (absolute desktop coordinates). The mapping accounts for zoom-to-fit padding.
+- Click **Open X/Y Window** for a separate, non-modal floating inspector with editable X/Y controls and direct **Simulate touch** / **Mouse click** operations. The main preview also has **Touch at X/Y**, **Mouse click at X/Y** and **Copy touch command** buttons.
+- Improved native touch handling: periodic contact update events during holds, retries for Windows `ERROR_NOT_READY` (21), and Win32 error code + injection phase reporting for other failures.
+- If touch still fails, send the complete `ERROR: InjectTouchInput ... Win32 error ...` line together with `WIN_DIAGNOSTICS`. The previous one-line failure cannot reveal which Windows condition occurred.
+- Use `build_exe_windows.bat` to build this version, then `launch_windows.bat` to run it. No Python is needed.

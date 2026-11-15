@@ -1,4 +1,4 @@
-# Touch Simulator C# — Complete command reference (v1.1)
+# Touch Simulator C# — Complete command reference (v1.2)
 
 All commands are **case-insensitive**. Enter one command at a time in the text box and click **Execute command**. Numbers are integers. The default coordinate system is **absolute virtual-desktop pixel coordinates** (including negative coordinates on monitors to the left/top of the primary display). After selecting a target window, coordinates refer to **its client area**, with `(0,0)` at the client area's top-left corner. The screenshot displays the same selected region. Set Windows display scaling normally; the application uses per-monitor DPI awareness.
 
@@ -94,3 +94,15 @@ Touch/drag/click commands affect **real desktop windows**. Use a disposable test
 Run `launch_windows.bat` to start the published EXE, or start from source if the EXE has not been built. The launcher stays open when the UI exits. If no window appears, consult `%LOCALAPPDATA%\TouchSimulator\logs\startup.log` and, for build failures, `build_log.txt`.
 
 The title is displayed dynamically for a selected HWND, so changing File Explorer folders normally does not lose targeting. Closed/reused HWNDs are rejected.
+
+## Version 1.2: screenshot coordinate inspector and troubleshooting
+
+1. Select the target with `WIN_TARGET_APP_explorer`, `WIN_TARGET_WINDOW_...`, or the dropdown.
+2. Run `WIN_SCREENSHOT`. Move the pointer over the displayed image. The **Command X/Y** and **Screen X/Y** readouts update without clicking. Letterboxing from the zoomed preview is excluded.
+3. Click **Open X/Y Window** to show an independent floating Coordinate Inspector. It displays the current image pixel mapped into command coordinates, plus the absolute screen coordinates. X/Y fields are editable for precise input.
+4. Use **Touch at X/Y**, **Mouse click at X/Y**, or **Copy touch command** beneath the image. The floating inspector provides its own **Simulate touch** and **Mouse click** buttons. The original optional **Touch when clicking the screenshot** checkbox remains available.
+5. After changing or moving the target, capture a fresh screenshot before executing an image coordinate. Preview clicks use the selected target's client-area coordinates; with no target, they use absolute virtual desktop coordinates, including negative values on secondary monitors.
+
+**Native touch failure diagnostics:** v1.2 reports the actual Windows error code and phase (`DOWN`, `HOLD/UPDATE`, `MOVE/UPDATE`, `UP`). Error `87` often indicates invalid contact data/coordinates; `5` is access denied; `21` is a timing issue (driver retries these frames). The driver uses periodic UPDATE frames during a touch hold and reports the latest touch code through `WIN_DIAGNOSTICS`. A generic `InjectTouchInput failed` message is insufficient to identify a specific cause. Windows touch-injection support is session/application dependent; some targets respond to mouse input but not true touch. Test in a normal interactive Windows desktop with a simple, non-elevated application, not on a secure desktop or inside a session that blocks touch injection.
+
+The screenshot is a capture of **visible desktop pixels**; the program does not obtain hidden application surfaces. The simulator's own window can obstruct the target window. Bring the target to the foreground or arrange it beside the simulator if your touch command seems to hit the simulator instead of the target. `WIN_FOCUS_TARGET` may help, but focus changes are restricted by Windows. `WIN_MOUSE_CLICK` remains a useful control comparison when `WIN_TOUCH` fails.

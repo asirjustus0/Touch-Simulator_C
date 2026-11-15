@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("TouchSimulator")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+403f02811405145ca30271045e46bf390ed5cbdb")]
 [assembly: System.Reflection.AssemblyProductAttribute("TouchSimulator")]
 [assembly: System.Reflection.AssemblyTitleAttribute("TouchSimulator")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

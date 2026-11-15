@@ -13,11 +13,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\asirj\\Downloads\\TouchSimulator_CSharp_v1_1\\TouchSimulator_CSharp_v1_1\\TouchSimulator\\TouchSimulator.csproj",
+      "projectUniqueName": "C:\\Justus\\Projects\\Repo\\Touch-Simulator_C\\TouchSimulator\\TouchSimulator.csproj",
       "projectName": "TouchSimulator",
-      "projectPath": "C:\\Users\\asirj\\Downloads\\TouchSimulator_CSharp_v1_1\\TouchSimulator_CSharp_v1_1\\TouchSimulator\\TouchSimulator.csproj",
+      "projectPath": "C:\\Justus\\Projects\\Repo\\Touch-Simulator_C\\TouchSimulator\\TouchSimulator.csproj",
       "packagesPath": "C:\\Users\\asirj\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\asirj\\Downloads\\TouchSimulator_CSharp_v1_1\\TouchSimulator_CSharp_v1_1\\TouchSimulator\\obj\\",
+      "outputPath": "C:\\Justus\\Projects\\Repo\\Touch-Simulator_C\\TouchSimulator\\obj\\",
       "projectStyle": "PackageReference",
       "configFilePaths": [
         "C:\\Users\\asirj\\AppData\\Roaming\\NuGet\\NuGet.Config"

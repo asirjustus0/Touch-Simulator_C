@@ -12,6 +12,8 @@ TouchSimulator.exe  (C#, .NET 10 Windows Forms)
 │                       │     ├── SendInput / SetCursorPos
 │                       │     └── EnumWindows / GetClientRect / ClientToScreen
 │                       └── GDI+ Bitmap / Graphics.CopyFromScreen
+├── CoordinateInspectorForm  floating X/Y tool window and touch/click actions
+├── PreviewCoordinateMapper image-zoom / letterbox aware coordinate mapping
 ├── StartupLog             persistent early-startup/crash log
 └── MjpegAviRecorder        pure C# RIFF AVI writer; JPEG frame encoding
 ```
